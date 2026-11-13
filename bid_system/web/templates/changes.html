@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}变更记录{% endblock %}
+{% block content %}
+<h1>变更记录</h1>
+<p class="muted">更正公告自动挂接到原公告，字段级差异全部留痕（同一项目多次更正可完整追溯）。</p>
+<div class="card" style="padding:0">
+  <table>
+    <tr><th>时间</th><th>项目</th><th>来源平台</th><th>触发公告</th>
+        <th>变更字段</th><th>原值 → 新值</th></tr>
+    {% for c in changes %}
+    <tr>
+      <td class="muted nowrap">{{ c.changed_at[5:16].replace('T', ' ') }}</td>
+      <td>
+        <a href="{{ url_for('page_project', project_id=c.project_id) }}">
+          {{ c.project_title }}</a>
+        <div class="muted mono">{{ c.project_code or '' }}</div>
+      </td>
+      <td class="mono">{{ c.platform_code }}</td>
+      <td class="mono">#{{ c.notice_id }}
+        {% if c.parent_notice_id %}→ 原 #{{ c.parent_notice_id }}{% endif %}</td>
+      <td><b>{{ c.field_name }}</b></td>
+      <td>
+        <span class="diff-old">{{ c.old_value or '（空）' }}</span>
+        →
+        <span class="diff-new">{{ c.new_value or '（空）' }}</span>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted" style="padding:24px;text-align:center">
+      暂无变更，先让 mock 平台演化一轮再跑增量即可看到更正记录
+    </td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% if pages > 1 %}
+<div class="pager">
+  {% for p in range(1, pages + 1) %}
+    {% if p == page %}<span class="cur">{{ p }}</span>
+    {% else %}<a href="?page={{ p }}">{{ p }}</a>{% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

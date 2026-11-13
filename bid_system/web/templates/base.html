@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}招投标采集控制台{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">招投标<br>采集控制台</div>
+    <nav>
+      <a href="{{ url_for('page_tasks') }}" class="{{ 'active' if request.endpoint=='page_tasks' }}">采集任务</a>
+      <a href="{{ url_for('page_notices') }}" class="{{ 'active' if request.endpoint in ('page_notices','page_project') }}">公告列表</a>
+      <a href="{{ url_for('page_changes') }}" class="{{ 'active' if request.endpoint=='page_changes' }}">变更记录</a>
+      <a href="{{ url_for('page_retries') }}" class="{{ 'active' if request.endpoint=='page_retries' }}">失败重试</a>
+      <a href="{{ url_for('page_settings') }}" class="{{ 'active' if request.endpoint=='page_settings' }}">设置</a>
+    </nav>
+  </aside>
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+<script>
+async function postForm(url, data) {
+  const body = new URLSearchParams(data || {});
+  const r = await fetch(url, {method: 'POST', body,
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'}});
+  return r.json();
+}
+function toast(msg, ok=true) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + (ok ? 'ok' : 'err');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+function fmtMoney(v) {
+  if (v === null || v === undefined) return '—';
+  return Number(v).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

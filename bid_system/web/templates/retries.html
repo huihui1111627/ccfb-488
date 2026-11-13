@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}失败重试{% endblock %}
+{% block content %}
+<h1>失败重试队列</h1>
+<div class="card row" style="justify-content: space-between;">
+  <div class="row">
+    <a class="btn {{ 'secondary' if current else '' }}" href="{{ url_for('page_retries') }}">全部</a>
+    <a class="btn {{ 'secondary' if current!='pending' else '' }}"
+       href="{{ url_for('page_retries', status='pending') }}">待处理</a>
+    <a class="btn {{ 'secondary' if current!='dead' else '' }}"
+       href="{{ url_for('page_retries', status='dead') }}">已放弃(dead)</a>
+    <a class="btn {{ 'secondary' if current!='success' else '' }}"
+       href="{{ url_for('page_retries', status='success') }}">已恢复</a>
+  </div>
+  <button class="btn" onclick="rerunAll(this)">⟳ 一键重跑全部待处理</button>
+</div>
+
+<div class="card" style="padding:0">
+  <table>
+    <tr><th>#</th><th>平台</th><th>条目ID</th><th>阶段</th><th>失败原因</th>
+        <th>尝试次数</th><th>状态</th><th>最近错误</th><th>更新时间</th><th>操作</th></tr>
+    {% for it in items %}
+    <tr>
+      <td>{{ it.id }}</td>
+      <td class="mono">{{ it.platform_code }}</td>
+      <td class="mono">{{ it.platform_notice_id or '—' }}</td>
+      <td><span class="pill">{{ it.stage }}</span></td>
+      <td style="max-width:280px">{{ it.reason }}</td>
+      <td>{{ it.attempts }}</td>
+      <td><span class="badge {{ it.status }}">
+        {{ {'pending':'待处理','running':'处理中','success':'已恢复','dead':'已放弃'}.get(it.status, it.status) }}
+      </span></td>
+      <td class="muted" style="max-width:240px">{{ it.last_error or '' }}</td>
+      <td class="muted nowrap">{{ it.updated_at[5:16].replace('T',' ') }}</td>
+      <td>
+        {% if it.status in ('pending', 'dead') %}
+        <button class="btn small" onclick="rerun({{ it.id }}, this)">手动重跑</button>
+        {% else %}<span class="muted">—</span>{% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="10" class="muted" style="padding:24px;text-align:center">
+      队列是空的——可以到「设置」页注入故障（flaky/限流/会话过期）后再采集来演示
+    </td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function rerun(id, btn) {
+  btn.disabled = true;
+  const r = await postForm(`/api/retries/${id}/rerun`);
+  toast(r.ok ? `重跑成功：${r.action || 'ok'}` : `仍失败：${r.reason}`, r.ok);
+  setTimeout(() => location.reload(), 1200);
+}
+async function rerunAll(btn) {
+  btn.disabled = true;
+  const r = await postForm('{{ url_for("api_retry_all") }}');
+  toast(`重跑完成：成功 ${r.success} / 失败 ${r.failed}（共 ${r.total}）`, r.failed === 0);
+  setTimeout(() => location.reload(), 1500);
+}
+</script>
+{% endblock %}

@@ -1,3 +1,10 @@
+# 运行期数据
+bid_system/data/
+__pycache__/
+*.pyc
+*.xlsx
+.pytest_cache/
+
 .env
 .env.*
 !.env.example
@@ -13,6 +20,5 @@ credentials*.json
 .npmrc
 .pypirc
 node_modules/
-__pycache__/
 .venv/
 venv/

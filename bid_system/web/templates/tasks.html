@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}采集任务{% endblock %}
+{% block content %}
+<h1>采集任务</h1>
+
+<div class="card">
+  <div class="row" style="justify-content: space-between;">
+    <div class="row">
+      <select id="platform">
+        <option value="">全部平台（3个）</option>
+        {% for p in mock_state %}
+        <option value="{{ p }}">{{ p }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn" onclick="runTask('incremental', this)">▶ 手动增量采集</button>
+      <button class="btn secondary" onclick="runTask('full', this)">⟳ 全量重采</button>
+    </div>
+    <div class="row">
+      <span class="muted">引擎状态：
+        <span class="badge {{ 'running' if busy else 'success' }}">
+          {{ '采集中' if busy else '空闲' }}</span></span>
+      <span class="muted">定时调度：
+        <span class="badge {{ 'running' if scheduler_running else 'gray' }}">
+          {{ '运行中' if scheduler_running else '线程未启动' }}</span></span>
+      <span class="muted">待重试：<b>{{ pending_retry }}</b> 条</span>
+    </div>
+  </div>
+  <p class="muted" style="margin-bottom:0">
+    增量从断点水位继续；全量重翻全部页面，已入库公告自动判重不会重复写入。
+    想演示两轮增量：先到「设置」页让 mock 平台演化数据，再点两次增量。
+  </p>
+</div>
+
+<h2>Mock 平台实时状态</h2>
+<div class="card">
+  <table>
+    <tr><th>平台</th><th>数据轮次</th><th>公告数</th><th>限流(次/分)</th>
+        <th>剩余故障注入</th><th>登录会话</th><th>连通性</th></tr>
+    {% for code, st in mock_state.items() %}
+    <tr>
+      <td class="mono">{{ code }}</td>
+      {% if st.unreachable is defined %}
+      <td colspan="6" class="muted">不可达：{{ st.unreachable }}</td>
+      {% else %}
+      <td>第 {{ st.round }} 轮</td>
+      <td>{{ st.counts | sum_dict }}</td>
+      <td>{{ st.rate_limits | default({}) | dict_get(code) or '不限' }}</td>
+      <td>{{ st.flaky | default({}) | dict_get(code) or 0 }}</td>
+      <td>{{ st.sessions }} 个{% if st.force_expire %} <span class="badge dead">强制过期中</span>{% endif %}</td>
+      <td><span class="badge done">在线</span></td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<h2>断点（checkpoint）</h2>
+<div class="card">
+  {% if checkpoints %}
+  <table>
+    <tr><th>平台</th><th>续跑页码</th><th>增量水位(最大发布时间)</th><th>已见条目数</th><th>更新时间</th></tr>
+    {% for c in checkpoints %}
+    <tr>
+      <td class="mono">{{ c.platform_code }}</td>
+      <td>{{ c.last_page }}</td>
+      <td>{{ c.last_published or '—' }}</td>
+      <td>{{ c.seen_ids | from_json | length }}</td>
+      <td>{{ c.updated_at }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="muted">还没有采集记录。</p>{% endif %}
+</div>
+
+<h2>任务历史（最近 30 次）</h2>
+<div class="card" style="padding:0">
+  <table>
+    <tr><th>#</th><th>类型</th><th>平台</th><th>状态</th><th>触发</th>
+        <th>新增</th><th>更正</th><th>重复</th><th>失败</th><th>开始</th><th>结束</th><th>说明</th></tr>
+    {% for r in runs %}
+    <tr>
+      <td>{{ r.id }}</td>
+      <td><span class="pill">{{ '全量' if r.task_type=='full' else ('增量' if r.task_type=='incremental' else '重试') }}</span></td>
+      <td class="mono">{{ r.platform_code or '全部' }}</td>
+      <td><span class="badge {{ r.status }}">{{ r.status }}</span></td>
+      <td>{{ r.trigger }}</td>
+      <td>{{ r.inserted }}</td><td>{{ r.corrected }}</td>
+      <td>{{ r.duplicated }}</td><td>{{ r.failed }}</td>
+      <td>{{ r.started_at[11:16] }}</td><td>{{ (r.finished_at or '—')[11:16] if r.finished_at else '—' }}</td>
+      <td class="muted">{{ r.message or '' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="12" class="muted">暂无任务</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function runTask(mode, btn) {
+  btn.disabled = true;
+  const platform = document.getElementById('platform').value;
+  const r = await postForm('{{ url_for("api_run") }}', {mode, platform_code: platform});
+  if (!r.ok) { toast(r.error || '启动失败', false); btn.disabled = false; return; }
+  toast('任务已提交，后台执行中…可在本页查看历史结果');
+  setTimeout(() => location.reload(), 2500);
+}
+</script>
+{% endblock %}

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}项目详情{% endblock %}
+{% block content %}
+<h1>{{ project.title }}</h1>
+
+<div class="card">
+  <dl class="kv">
+    <dt>项目编号</dt><dd class="mono">{{ project.project_code or '（无编号，按地区+标题指纹去重）' }}</dd>
+    <dt>去重键</dt><dd class="mono muted">{{ project.project_key }}</dd>
+    <dt>地区</dt><dd>{{ project.region or '—' }}</dd>
+    <dt>首次发现</dt><dd>{{ project.first_seen_at }}</dd>
+    <dt>最近更新</dt><dd>{{ project.updated_at }}</dd>
+  </dl>
+</div>
+
+<h2>关联公告（{{ notices|length }} 条，跨平台转载已归并到同一项目）</h2>
+<div class="card" style="padding:0">
+  <table>
+    <tr><th>#</th><th>来源平台</th><th>平台条目ID</th><th>类型</th><th>标题</th>
+        <th>预算(元)</th><th>截止时间</th><th>发布时间</th><th>原文</th></tr>
+    {% for n in notices %}
+    <tr>
+      <td>{{ n.id }}{% if n.id == project.latest_notice_id %} <span class="badge done">最新</span>{% endif %}</td>
+      <td class="mono">{{ n.platform_code }}</td>
+      <td class="mono">{{ n.platform_notice_id }}</td>
+      <td>{% if n.notice_type=='更正公告' %}<span class="badge corr">更正</span>
+          {% else %}<span class="badge gray">{{ n.notice_type }}</span>{% endif %}</td>
+      <td>{{ n.title }}</td>
+      <td>{{ '{:,.2f}'.format(n.budget) if n.budget else '—' }}</td>
+      <td>{{ n.deadline or '—' }}</td>
+      <td class="muted">{{ (n.published_at or '')[:16] }}</td>
+      <td>{% if n.url %}<a href="{{ n.url }}" target="_blank">打开 ↗</a>
+        {% if n.pdf_path %}<br><span class="muted">PDF已解析</span>{% endif %}
+      {% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<h2>字段变更留痕（{{ changes|length }} 项）</h2>
+<div class="card" style="padding:0">
+  <table>
+    <tr><th>时间</th><th>来源公告</th><th>字段</th><th>原值</th><th>新值</th></tr>
+    {% for c in changes %}
+    <tr>
+      <td class="muted">{{ c.changed_at[11:16] }}</td>
+      <td class="mono">#{{ c.notice_id }}{% if c.parent_notice_id %} → 原 #{{ c.parent_notice_id }}{% endif %}</td>
+      <td><b>{{ c.field_name }}</b></td>
+      <td class="diff-old">{{ c.old_value or '（空）' }}</td>
+      <td class="diff-new">{{ c.new_value or '（空）' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted" style="padding:20px;text-align:center">暂无变更</td></tr>
+    {% endfor %}
+  </table>
+</div>
+<p><a class="btn secondary" href="{{ url_for('page_notices') }}">← 返回公告列表</a></p>
+{% endblock %}

@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}设置{% endblock %}
+{% block content %}
+<h1>设置</h1>
+
+<h2>定时调度</h2>
+<div class="card">
+  <div class="row">
+    <label>调度开关
+      <select id="sched-enabled">
+        <option value="0" {{ 'selected' if settings.scheduler_enabled!='1' }}>关闭</option>
+        <option value="1" {{ 'selected' if settings.scheduler_enabled=='1' }}>开启</option>
+      </select>
+    </label>
+    <label>Cron 表达式（5段：分 时 日 月 周）
+      <input id="cron" value="{{ settings.schedule_cron }}" style="width:180px"
+             placeholder="*/30 * * * *">
+    </label>
+    <button class="btn" onclick="saveScheduler()">保存调度设置</button>
+  </div>
+  <p class="muted" style="margin-bottom:0">
+    支持 <span class="mono">*/N</span>、逗号列表、区间、星号。例：
+    <span class="mono">*/30 * * * *</span> 每半小时；
+    <span class="mono">0 9 * * 1-5</span> 工作日早9点。到点自动跑增量，引擎忙时自动跳过。
+  </p>
+</div>
+
+<h2>Mock 平台故障注入（演示自动退避 / 续登 / 重试）</h2>
+<div class="card">
+  <div class="row" style="margin-bottom:12px">
+    <label>限流阈值（每 IP 每分钟请求数，0=不限流）
+      <input id="rate" type="number" min="0" value="{{ settings.rate_limit_per_minute }}"
+             style="width:110px">
+    </label>
+    <button class="btn secondary" onclick="setRate()">下发到三个平台</button>
+  </div>
+  <div class="row" style="margin-bottom:12px">
+    <label>详情接口故障注入（前 N 次请求返回 500，0=关闭）
+      <input id="flaky" type="number" min="0" value="{{ settings.flaky_fail_count }}"
+             style="width:110px">
+    </label>
+    <button class="btn secondary" onclick="setFlaky()">注入故障</button>
+  </div>
+  <div class="row">
+    <button class="btn danger" onclick="expire()">强制登录会话立即过期（演示自动续登）</button>
+    <button class="btn" onclick="restore()">恢复登录平台会话</button>
+  </div>
+  <p class="muted" style="margin-bottom:0">
+    采集端行为：429 读取 <span class="mono">Retry-After</span> 退避；500 按 2/5/10/20 秒指数退避；
+    auth 平台 401 自动重新走 Playwright 登录续会话；单条最终失败进入重试队列。
+  </p>
+</div>
+
+<h2>Mock 数据演化（演示两轮增量）</h2>
+<div class="card">
+  <p class="muted">
+    每轮演化会新增公告（含跨平台转载）并发更正公告。流程：演化第1轮 → 跑增量 →
+    演化第2轮 → 再跑增量，到「变更记录」看预算/截止时间差异，重复条目不会二次入库。
+  </p>
+  <div class="row">
+    <button class="btn" onclick="evolve(1, this)">① 演化第 1 轮（新增3 + 更正2）</button>
+    <button class="btn" onclick="evolve(2, this)">② 演化第 2 轮（新增3 + 更正2，含二次更正）</button>
+    <button class="btn gray" onclick="resetAll()">↺ 重置 mock 数据到初始状态</button>
+  </div>
+</div>
+
+<h2>平台连接信息</h2>
+<div class="card" style="padding:0">
+  <table>
+    <tr><th>平台代码</th><th>名称</th><th>地址</th><th>采集方式</th></tr>
+    {% for p in platforms %}
+    <tr>
+      <td class="mono">{{ p.code }}</td><td>{{ p.name }}</td>
+      <td class="mono">{{ p.base_url }}</td>
+      <td>{{ {'html':'httpx + HTML 解析','json':'httpx + JSON','auth':'Playwright 登录 + JSON'}.get(p.kind) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<h2>当前 mock 平台状态</h2>
+<div class="card" style="padding:0">
+  <table>
+    <tr><th>平台</th><th>轮次</th><th>公告数</th><th>限流</th><th>故障剩余</th><th>会话数</th><th>强制过期</th></tr>
+    {% for code, st in mock_state.items() %}
+    <tr>
+      <td class="mono">{{ code }}</td>
+      {% if st.unreachable is defined %}
+      <td colspan="6" class="muted">平台未启动：{{ st.unreachable }}</td>
+      {% else %}
+      <td>{{ st.round }}</td>
+      <td>{{ st.counts.values() | sum }}</td>
+      <td>{{ st.rate_limits | tojson }}</td>
+      <td>{{ st.flaky | tojson }}</td>
+      <td>{{ st.sessions }}</td>
+      <td>{{ '是' if st.force_expire else '否' }}</td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function saveScheduler() {
+  const r = await postForm('{{ url_for("api_scheduler") }}', {
+    enabled: document.getElementById('sched-enabled').value,
+    schedule_cron: document.getElementById('cron').value});
+  toast(r.ok ? '调度设置已保存' : r.error, r.ok);
+}
+async function setRate() {
+  const r = await postForm('{{ url_for("api_rate_limit") }}',
+    {limit: document.getElementById('rate').value});
+  toast(r.ok ? '限流阈值已下发' : '下发失败', r.ok);
+}
+async function setFlaky() {
+  const r = await postForm('{{ url_for("api_flaky") }}',
+    {count: document.getElementById('flaky').value});
+  toast(r.ok ? '故障注入已设置' : '设置失败', r.ok);
+}
+async function expire() {
+  const r = await postForm('{{ url_for("api_expire") }}');
+  toast(r.ok ? '登录会话已强制过期，下次采集会自动续登' : '操作失败', r.ok);
+}
+async function restore() {
+  const r = await postForm('{{ url_for("api_restore") }}');
+  toast(r.ok ? '会话限制已解除' : '操作失败', r.ok);
+}
+async function evolve(round, btn) {
+  btn.disabled = true;
+  const r = await postForm(`/api/mock/evolve/${round}`);
+  toast(r.ok ? `第 ${round} 轮数据已上线，去任务页跑增量` : '演化失败', r.ok);
+  setTimeout(() => location.reload(), 1200);
+}
+async function resetAll() {
+  const r = await postForm('{{ url_for("api_reset_mock") }}');
+  toast('mock 数据已重置为初始 16 条（数据库不受影响）');
+  setTimeout(() => location.reload(), 1200);
+}
+</script>
+{% endblock %}

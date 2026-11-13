@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}公告列表{% endblock %}
+{% block content %}
+<h1>公告列表 <span class="muted">共 {{ total }} 条</span></h1>
+
+<form class="filter-bar" method="get">
+  <input name="keyword" placeholder="关键词（标题/编号/采购人）" value="{{ clean.keyword or '' }}">
+  <select name="region">
+    <option value="">全部地区</option>
+    {% for r in regions %}
+    <option value="{{ r }}" {{ 'selected' if clean.region==r }}>{{ r }}</option>
+    {% endfor %}
+  </select>
+  <input name="min_amount" type="number" placeholder="预算≥(元)" style="width:120px"
+         value="{{ clean.min_amount or '' }}">
+  <input name="max_amount" type="number" placeholder="预算≤(元)" style="width:120px"
+         value="{{ clean.max_amount or '' }}">
+  <select name="notice_type">
+    <option value="">全部类型</option>
+    <option value="招标公告" {{ 'selected' if clean.notice_type=='招标公告' }}>招标公告</option>
+    <option value="更正公告" {{ 'selected' if clean.notice_type=='更正公告' }}>更正公告</option>
+  </select>
+  <button class="btn" type="submit">筛选</button>
+  <a class="btn secondary" href="{{ url_for('page_notices') }}">重置</a>
+  <button class="btn gray" type="button" onclick="exportExcel()">⬇ 导出 Excel（当前筛选）</button>
+</form>
+
+<div class="card" style="padding:0">
+  <table>
+    <tr><th>ID</th><th>项目编号 / 标题</th><th>类型</th><th>来源平台</th><th>地区</th>
+        <th>预算(元)</th><th>截止时间</th><th>发布时间</th><th>关联</th></tr>
+    {% for n in notices %}
+    <tr>
+      <td class="mono">{{ n.id }}</td>
+      <td>
+        <a href="{{ url_for('page_project', project_id=n.project_id) }}">
+          {{ n.title }}</a>
+        <div class="muted mono">{{ n.project_code or '（无编号）' }}</div>
+      </td>
+      <td>
+        {% if n.notice_type == '更正公告' %}
+        <span class="badge corr">更正公告</span>
+        {% else %}<span class="badge gray">{{ n.notice_type }}</span>{% endif %}
+      </td>
+      <td class="mono">{{ n.platform_code }}</td>
+      <td>{{ n.region or '—' }}</td>
+      <td>{{ '{:,.2f}'.format(n.budget) if n.budget else '—' }}</td>
+      <td>{{ n.deadline or '—' }}</td>
+      <td class="muted">{{ (n.published_at or '')[:16] }}</td>
+      <td>
+        {% if n.parent_notice_id %}<span class="badge corr">挂接原公告 #{{ n.parent_notice_id }}</span>{% endif %}
+        {% if n.child_count %}<span class="badge pending">含 {{ n.child_count }} 条更正</span>{% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9" class="muted" style="padding:24px;text-align:center">没有符合条件的公告</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+{% if pages > 1 %}
+<div class="pager">
+  {% set qs = clean | urlencode_pairs %}
+  {% for p in range(1, pages + 1) %}
+    {% if p == page %}<span class="cur">{{ p }}</span>
+    {% else %}<a href="?{{ qs }}&page={{ p }}">{{ p }}</a>{% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+function exportExcel() {
+  const qs = new URLSearchParams(location.search);
+  location.href = '{{ url_for("export_excel") }}?' + qs.toString();
+}
+</script>
+{% endblock %}
